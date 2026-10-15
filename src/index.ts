@@ -20,8 +20,8 @@ app.use(
 app.use('/auth', authRouter);
 app.use('/profile', profileRouter);
 
-app.get('/', (req, res) => {
-  res.send('Hello');
+app.use((req, res) => {
+  res.status(404).json({ message: 'Not found' });
 });
 
 app.listen(PORT, () => {

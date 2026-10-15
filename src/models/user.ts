@@ -18,6 +18,7 @@ export class User extends Model<
   declare email: string;
   declare password: string;
   declare activationToken: string | null;
+  declare resetToken: string | null;
 }
 
 User.init(
@@ -27,6 +28,7 @@ User.init(
     email: { type: DataTypes.STRING, allowNull: false, unique: true },
     password: { type: DataTypes.STRING, allowNull: false },
     activationToken: { type: DataTypes.STRING, allowNull: true },
+    resetToken: { type: DataTypes.STRING, allowNull: true },
   },
   { sequelize: client, tableName: 'users' },
 );

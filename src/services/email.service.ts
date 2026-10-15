@@ -45,8 +45,21 @@ function sendEmailChangedNotification(oldEmail: string, newEmail: string) {
   return send(oldEmail, 'Your email was changed', html);
 }
 
+function sendPasswordResetLink(email: string, resetToken: string) {
+  const link = `${process.env.CLIENT_HOST}/reset-password/${resetToken}`;
+
+  const html = `
+    <h1>Password reset</h1>
+    <p>Click the link to set a new password:</p>
+    <a href="${link}">${link}</a>
+  `;
+
+  return send(email, 'Password reset', html);
+}
+
 export const mailer = {
   send,
   sendActivationLink,
   sendEmailChangedNotification,
+  sendPasswordResetLink,
 };

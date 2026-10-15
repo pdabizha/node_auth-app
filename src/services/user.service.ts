@@ -12,10 +12,10 @@ function validateName(name: unknown) {
   }
 }
 
-function validateEmail(email: string) {
+function validateEmail(email: unknown) {
   const emailPattern = /^[\w.+-]+@([\w-]+\.){1,3}[\w-]{2,}$/;
 
-  if (!email) {
+  if (typeof email !== 'string' || !email) {
     return 'Email is required';
   }
 
@@ -55,12 +55,25 @@ function validatePassword(password: unknown) {
   }
 }
 
+function validatePasswordConfirmation(
+  password: unknown,
+  confirmation: unknown,
+) {
+  if (password !== confirmation) {
+    return 'Passwords do not match';
+  }
+}
+
 function normalize({ id, email, name }: User) {
   return { id, email, name };
 }
 
-function findByEmail(email: string) {
-  return User.findOne({ where: { email } });
+function findByEmail(email: unknown) {
+  if (typeof email !== 'string') {
+    return Promise.resolve(null);
+  }
+
+  return User.findOne({ where: { email: email.trim().toLowerCase() } });
 }
 
 export const userService = {
@@ -70,4 +83,5 @@ export const userService = {
   normalize,
   findByEmail,
   passwordRules,
+  validatePasswordConfirmation,
 };

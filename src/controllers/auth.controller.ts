@@ -7,6 +7,18 @@ import { UniqueConstraintError } from 'sequelize';
 import { NormalizedUser, userService } from '../services/user.service.js';
 import { jwt } from '../utils/jwt.js';
 
+function setRefreshCookie(res: ExpressResponse, user: User) {
+  const refreshToken = jwt.generateRefreshToken(userService.normalize(user));
+  const isProd = process.env.NODE_ENV === 'production';
+
+  res.cookie('refreshToken', refreshToken, {
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
+  });
+}
+
 async function sendAuthentication(res: ExpressResponse, user: User) {
   const userData = userService.normalize(user);
   const accessToken = jwt.generateAccessToken(userData);
@@ -98,6 +110,7 @@ const activate: RequestHandler = async (req, res) => {
   }
   user.activationToken = null;
   await user.save();
+  setRefreshCookie(res, user);
   res.redirect('/profile');
 };
 
@@ -117,8 +130,7 @@ const login: RequestHandler = async (req, res) => {
     return;
   }
 
-  sendAuthentication(res, user);
-  res.redirect('/profile');
+  await sendAuthentication(res, user);
 };
 
 const logout: RequestHandler = async (req, res) => {
@@ -147,10 +159,101 @@ const refresh: RequestHandler = async (req, res) => {
   await sendAuthentication(res, user);
 };
 
+const requestPasswordReset: RequestHandler = async (req, res) => {
+  const email = String(req.body.email ?? '')
+    .trim()
+    .toLowerCase();
+  const emailError = userService.validateEmail(email);
+
+  if (emailError) {
+    res.status(400).json({
+      errors: { email: emailError },
+      message: 'Validation error',
+    });
+
+    return;
+  }
+
+  const user = await userService.findByEmail(email);
+
+  if (user) {
+    user.resetToken = uuidV4();
+    await user.save();
+
+    await mailer.sendPasswordResetLink(user.email, user.resetToken);
+  }
+
+  // одинаковый ответ, чтобы нельзя было узнать, какие email зарегистрированы
+  res.json({ message: 'If this email is registered, a reset link was sent' });
+};
+
+const checkResetToken: RequestHandler = async (req, res) => {
+  const { resetToken } = req.params;
+  const user = await User.findOne({ where: { resetToken } });
+
+  if (!user) {
+    res.status(404).json({ message: 'Wrong or expired reset link' });
+
+    return;
+  }
+
+  res.json({ message: 'Reset token is valid' });
+};
+
+const confirmPasswordReset: RequestHandler = async (req, res) => {
+  const { resetToken, password, confirmation } = req.body;
+
+  const errors = {
+    password: userService.validatePassword(password),
+    confirmation: userService.validatePasswordConfirmation(
+      password,
+      confirmation,
+    ),
+  };
+
+  if (Object.values(errors).some((error) => error)) {
+    res.status(400).json({
+      errors,
+      ...(errors.password && { passwordRules: userService.passwordRules }),
+      message: 'Validation error',
+    });
+
+    return;
+  }
+
+  if (typeof resetToken !== 'string' || !resetToken) {
+    res.status(404).json({ message: 'Wrong or expired reset link' });
+
+    return;
+  }
+
+  const user = await User.findOne({ where: { resetToken } });
+
+  if (!user) {
+    res.status(404).json({ message: 'Wrong or expired reset link' });
+
+    return;
+  }
+
+  user.password = await bcrypt.hash(password, 10);
+  user.resetToken = null;
+  await user.save();
+
+  res.json({ message: 'Password was changed' });
+};
+
+const resetSuccess: RequestHandler = (req, res) => {
+  res.json({ message: 'Password was reset. You can log in now' });
+};
+
 export const authController = {
   register,
   activate,
   login,
   logout,
   refresh,
+  requestPasswordReset,
+  checkResetToken,
+  confirmPasswordReset,
+  resetSuccess,
 };
