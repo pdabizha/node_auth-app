@@ -24,13 +24,34 @@ function validateEmail(email: string) {
   }
 }
 
-function validatePassword(password: string) {
-  if (!password) {
+export const PASSWORD_RULES = [
+  { test: (p: string) => p.length >= 8, message: 'At least 8 characters' },
+  {
+    test: (p: string) => /[a-z]/.test(p),
+    message: 'At least one lowercase letter',
+  },
+  {
+    test: (p: string) => /[A-Z]/.test(p),
+    message: 'At least one uppercase letter',
+  },
+  { test: (p: string) => /\d/.test(p), message: 'At least one digit' },
+  {
+    test: (p: string) => /[^A-Za-z0-9]/.test(p),
+    message: 'At least one special character',
+  },
+];
+
+const passwordRules = PASSWORD_RULES.map((rule) => rule.message);
+
+function validatePassword(password: unknown) {
+  if (typeof password !== 'string' || !password) {
     return 'Password is required';
   }
 
-  if (password.length < 6) {
-    return 'At least 6 characters';
+  const failed = PASSWORD_RULES.filter((rule) => !rule.test(password));
+
+  if (failed.length > 0) {
+    return failed.map((rule) => rule.message).join('. ');
   }
 }
 
@@ -48,4 +69,5 @@ export const userService = {
   validatePassword,
   normalize,
   findByEmail,
+  passwordRules,
 };

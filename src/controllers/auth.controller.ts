@@ -4,7 +4,7 @@ import { mailer } from '../services/email.service.js';
 import { v4 as uuidV4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { UniqueConstraintError } from 'sequelize';
-import { userService } from '../services/user.service.js';
+import { NormalizedUser, userService } from '../services/user.service.js';
 import { jwt } from '../utils/jwt.js';
 
 async function sendAuthentication(res: ExpressResponse, user: User) {
@@ -36,10 +36,13 @@ const register: RequestHandler = async (req, res) => {
   };
 
   if (Object.values(errors).some((error) => error)) {
-    return res.status(400).json({
+    res.status(400).json({
       errors,
+      ...(errors.password && { passwordRules: userService.passwordRules }),
       message: 'Validation error',
     });
+
+    return;
   }
 
   const existingUser = await User.findOne({ where: { email } });
@@ -95,8 +98,6 @@ const activate: RequestHandler = async (req, res) => {
   }
   user.activationToken = null;
   await user.save();
-
-  sendAuthentication(res, user);
   res.redirect('/profile');
 };
 
@@ -120,8 +121,36 @@ const login: RequestHandler = async (req, res) => {
   res.redirect('/profile');
 };
 
+const logout: RequestHandler = async (req, res) => {
+  res.clearCookie('refreshToken');
+  res.sendStatus(204);
+};
+
+const refresh: RequestHandler = async (req, res) => {
+  const refreshToken = req.cookies?.refreshToken || '';
+  const userData = jwt.validateRefreshToken(refreshToken) as NormalizedUser;
+
+  if (!userData) {
+    res.status(401).json({ message: 'Invalid token' });
+
+    return;
+  }
+
+  const user = await userService.findByEmail(userData.email);
+
+  if (!user) {
+    res.status(401).json({ message: 'Invalid token' });
+
+    return;
+  }
+
+  await sendAuthentication(res, user);
+};
+
 export const authController = {
   register,
   activate,
   login,
+  logout,
+  refresh,
 };
